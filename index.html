@@ -599,7 +599,8 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       stroke(C.navy); doc.setLineWidth(0.5); doc.line(M, 16.6, PW - M, 16.6);
     }
 
-    function caixaIdent(spec, dados, y, rodapeAssinatura) {
+    // assin: { nome, quando } quando a carta sai assinada eletronicamente; null deixa a linha livre para o gov.br
+    function caixaIdent(spec, dados, y, rodapeAssinatura, assin) {
       var rowH = 7.4, linhas = spec.linhas.length;
       var h = 7 + linhas * rowH + 13.5;
       fill(C.idF); stroke(C.border); doc.setLineWidth(0.25);
@@ -627,14 +628,24 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       stroke(C.lgray); doc.setLineWidth(0.2); doc.line(lx2, ly + 0.8, meio, ly + 0.8);
       font(false, 8.5); color(C.dark); doc.text(dados.localData || '', lx2 + 0.8, ly);
       stroke(C.dark); doc.setLineWidth(0.3); doc.line(M + CW / 2 + 4, ly + 0.8, M + CW - 3, ly + 0.8);
-      font(false, 6.8); color(C.gray); doc.text(rodapeAssinatura, M + CW * 0.75 + 0.5, ly + 4, { align: 'center' });
+      var cx2 = M + CW * 0.75 + 0.5;
+      if (assin && assin.nome) {
+        var fs = 12; doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(fs);
+        while (doc.getTextWidth(assin.nome) > CW / 2 - 10 && fs > 8) { fs -= 0.5; doc.setFontSize(fs); }
+        color(C.navy); doc.text(assin.nome, cx2, ly - 0.6, { align: 'center' });
+        font(false, 6.8); color(C.gray); doc.text('Assinado eletronicamente em ' + assin.quando, cx2, ly + 4, { align: 'center' });
+      } else {
+        font(false, 6.8); color(C.gray); doc.text(rodapeAssinatura, cx2, ly + 4, { align: 'center' });
+      }
       return h;
     }
 
-    function registro(d, y) {
+    function registro(d, y, modo) {
       if (!d.registro) return 0;
       var r = d.registro;
-      var t = 'Carta gerada eletronicamente pelo formulário oficial do Projeto TEAcolhe em ' + r.quando + ' (horário de Brasília). Protocolo **' + r.protocolo + '**, vinculado ao e-mail ' + r.email + '. A confirmação do e-mail e a entrega desta carta assinada ficam registradas junto ao protocolo.';
+      var t = modo === 'govbr'
+        ? 'Versão para assinatura eletrônica pelo gov.br, preenchida pelo formulário oficial do Projeto TEAcolhe em ' + r.quando + ' (horário de Brasília). Protocolo **' + r.protocolo + '**, vinculado ao e-mail ' + r.email + '.'
+        : 'Assinado eletronicamente por **' + (r.nome || '') + '** pelo formulário oficial do Projeto TEAcolhe, mediante aceite expresso, em ' + r.quando + ' (horário de Brasília). Protocolo **' + r.protocolo + '**, vinculado ao e-mail ' + r.email + '. A confirmação do e-mail fica registrada junto ao protocolo.';
       fill([248, 250, 252]); stroke(C.cellB); doc.setLineWidth(0.2);
       var h = rico(t, M + 3, 0, CW - 6, 6.6, 2.9, C.gray, { medir: true, align: 'left' }) + 2.6;
       doc.roundedRect(M, y, CW, h, 1, 1, 'FD');
@@ -645,7 +656,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
     return { fill: fill, stroke: stroke, color: color, font: font, rico: rico, check: check, bloco: bloco, blocoAltura: blocoAltura, cabecalho: cabecalho, caixaIdent: caixaIdent, registro: registro, circuloNumero: circuloNumero };
   }
 
-  function paginaCarta(doc, D, d, logo) {
+  function paginaCarta(doc, D, d, logo, modo) {
     var P = PERFIS[d.perfil];
     D.cabecalho(logo);
     D.font(true, 15); D.color(C.navy); doc.text(P.titulo, PW / 2, 23.4, { align: 'center' });
@@ -688,11 +699,11 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
 
     D.rico(AVISO, M + 4, y, CW - 8, 6.8, 3.1, C.gray, { align: 'center' });
     y += 8;
-    y += D.caixaIdent(P.ident, d.ident || {}, y, 'Assinatura (manuscrita ou eletrônica gov.br)') + 2.6;
-    D.registro(d, Math.max(y, PH - 22));
+    y += D.caixaIdent(P.ident, d.ident || {}, y, 'Assinatura eletrônica gov.br', assinatura(d, modo)) + 2.6;
+    D.registro(d, Math.max(y, PH - 22), modo);
   }
 
-  function paginaTermo(doc, D, d, logo) {
+  function paginaTermo(doc, D, d, logo, modo) {
     var T = TERMO, c = d.conselho || {};
     D.cabecalho(logo);
     D.font(true, 6.8); D.color(C.orange); doc.text(T.tag, M, 20);
@@ -733,17 +744,22 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       doc.text(ls.slice(0, 2), M + 3.2, y + 10.8);
     }
     y += bh + 3.4;
-    D.caixaIdent(T.ident, d.ident || {}, y, 'Assinatura (manuscrita ou eletrônica gov.br)');
-    D.registro(d, PH - 18);
+    D.caixaIdent(T.ident, d.ident || {}, y, 'Assinatura eletrônica gov.br', assinatura(d, modo));
+    D.registro(d, PH - 18, modo);
   }
 
-  function gerarPDF(jsPDF, d, logo) {
+  function assinatura(d, modo) {
+    return modo === 'govbr' || !d.registro ? null : { nome: d.registro.nome, quando: d.registro.quando };
+  }
+
+  // modo: 'eletronica' (padrão, já assinada pelo formulário) ou 'govbr' (linha livre para assinar no gov.br)
+  function gerarPDF(jsPDF, d, logo, modo) {
     var doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
     var P = PERFIS[d.perfil];
     doc.setProperties({ title: P.titulo + ' - TEAcolhe', subject: 'Programa Centelha 3 Paraná - Projeto TEAcolhe', author: (d.ident && (d.ident.organizacao || d.ident.nome)) || '', creator: 'Projeto TEAcolhe' });
     var D = criarDesenho(doc);
-    paginaCarta(doc, D, d, logo);
-    if (d.conselho && d.conselho.ativo) { doc.addPage(); paginaTermo(doc, D, d, logo); }
+    paginaCarta(doc, D, d, logo, modo);
+    if (d.conselho && d.conselho.ativo) { doc.addPage(); paginaTermo(doc, D, d, logo, modo); }
     return doc;
   }
 
@@ -752,11 +768,11 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
     var s = p.length ? p[p.length - 1] : 'Apoio';
     return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'APOIO';
   }
-  function nomeArquivo(d) {
+  function nomeArquivo(d, modo) {
     var P = PERFIS[d.perfil];
     var base = P.org ? (d.ident.organizacao || d.ident.nome) : d.ident.nome;
     var prefixo = (d.conselho && d.conselho.ativo) ? 'Carta_e_Termo_Conselho' : 'Carta_Interesse_' + P.categoria;
-    return prefixo + '_' + sobrenome(base) + '_' + (d.registro ? d.registro.protocolo : 'TEAcolhe') + '.pdf';
+    return prefixo + '_' + sobrenome(base) + '_' + (d.registro ? d.registro.protocolo : 'TEAcolhe') + (modo === 'govbr' ? '_para_assinatura_govbr' : '') + '.pdf';
   }
 
   var api = { PERFIS: PERFIS, TERMO: TERMO, DICA: DICA, AVISO: AVISO, gerarPDF: gerarPDF, nomeArquivo: nomeArquivo };
@@ -966,7 +982,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       '<span class="eyebrow">Programa Centelha 3 Paraná</span>' +
       '<h1>Ajude a tirar o TEAcolhe do papel</h1>' +
       '<p>O TEAcolhe é uma plataforma digital feita com e para a comunidade autista. O projeto foi classificado na Fase 1 do Programa Centelha 3 Paraná, e cada carta de apoio fortalece a proposta.</p>' +
-      '<ul class="chips"><li>' + ICON.clock + 'Cerca de 3 minutos</li><li>' + ICON.doc + 'Carta pronta em PDF</li><li>' + ICON.mail + 'Cópia no seu e-mail</li></ul>' +
+      '<ul class="chips"><li>' + ICON.clock + 'Cerca de 3 minutos</li><li>' + ICON.doc + 'Assinatura aqui mesmo</li><li>' + ICON.mail + 'Cópia no seu e-mail</li></ul>' +
       '<p class="counter" id="contador" hidden></p>' +
       '</div>' +
       (DEMO ? '<p class="banner">Modo de demonstração: nenhum dado sai deste aparelho.</p>' : '') +
@@ -975,13 +991,12 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       '<li><span class="ic">' + ICON.users + '</span><div><b>Conselho Consultivo de Usuários</b><span class="tag">6 vagas</span><p>Famílias e pessoas autistas adultas ajudam a decidir como a plataforma funciona.</p></div></li>' +
       '<li><span class="ic">' + ICON.test + '</span><div><b>Testes da versão piloto</b><p>Use antes do lançamento e diga o que precisa mudar.</p></div></li>' +
       '<li><span class="ic">' + ICON.star + '</span><div><b>Pioneiros do TEAcolhe</b><p>Profissionais, clínicas e espaços que apoiam desde o início serão os primeiros a conhecer as condições de lançamento.</p></div></li>' +
-      '<li><span class="ic">' + ICON.coin + '</span><div><b>Oportunidades remuneradas</b><p>O projeto prevê atividades pagas na curadoria científica e no desenvolvimento do sistema. Quem entregou a carta recebe os avisos de seleção primeiro.</p></div></li>' +
+      '<li><span class="ic">' + ICON.coin + '</span><div><b>Oportunidades remuneradas</b><p>O projeto prevê atividades pagas na curadoria científica e no desenvolvimento do sistema. Quem apoia recebe os avisos de seleção em primeira mão.</p></div></li>' +
       '</ul></div>' +
       '<div class="panel"><h3>Como funciona</h3><ol class="how">' +
       '<li><span>Você responde algumas perguntas rápidas.</span></li>' +
-      '<li><span>Recebe sua carta pronta, em PDF, aqui e no seu e-mail.</span></li>' +
-      '<li><span>Assina pelo gov.br e devolve para nós.</span></li>' +
-      '</ol><p class="rule">Sua participação fica registrada quando a carta assinada chega até nós' + (CFG.prazo ? '. Cartas entregues até <b>' + esc(CFG.prazo) + '</b> entram na proposta' : '') + '.</p></div>' +
+      '<li><span>Assina eletronicamente aqui mesmo e recebe sua carta em PDF, na tela e no seu e-mail.</span></li>' +
+      '</ol><p class="rule">A assinatura é feita nesta página, sem cadastro em outros sites' + (CFG.prazo ? '. Cartas assinadas até <b>' + esc(CFG.prazo) + '</b> entram na proposta' : '') + '.</p></div>' +
       '<footer class="foot"><span>Gratuito e sem compromisso financeiro.</span><span>Projeto TEAcolhe · Cosmos Tecnologia, Inteligência e Soluções Ltda · CNPJ 67.103.039/0001-05</span><span><button type="button" class="lnkPriv">Aviso de privacidade</button></span></footer>' +
       '</section>';
     barra('<button class="btn btn-primary" type="button" id="bIniciar">' + (retomar ? 'Continuar de onde parei' : 'Quero apoiar') + '</button>');
@@ -1198,7 +1213,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
   TELAS.remunerado = function () {
     var ops = [['Curadoria científica do acervo', 'Para especialistas em TEA, com análise de fontes científicas.'], ['Desenvolvimento do sistema', 'Tecnologia, interface e acessibilidade digital.'], ['Não tenho interesse agora', '']];
     app.innerHTML = '<section class="screen"><span class="eyebrow">Oportunidades remuneradas</span><h2>Quer receber os avisos de seleção?</h2>' +
-      '<p class="muted">O projeto prevê atividades remuneradas na curadoria científica e no desenvolvimento do sistema. Quando houver seleção, quem entregou a carta assinada recebe o aviso primeiro. A seleção segue as regras do programa.</p>' +
+      '<p class="muted">O projeto prevê atividades remuneradas na curadoria científica e no desenvolvimento do sistema. Quando houver seleção, os apoiadores cadastrados recebem o aviso em primeira mão. A seleção segue as regras do programa.</p>' +
       '<fieldset class="opts" id="grp"><legend class="sr">Oportunidades remuneradas</legend>' + ops.map(function (o) { return opcaoHTML('varias', 'rm', o[0], o[0], S.remunerado.indexOf(o[0]) >= 0, o[1]); }).join('') + '</fieldset>' +
       '<p class="small muted">Esta resposta não aparece na carta.</p><p class="err" id="eQ" role="alert"></p></section>';
     barra(botaoVoltar() + '<button class="btn btn-primary" type="button" id="bNext">Continuar</button>');
@@ -1260,7 +1275,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       perfil: S.perfil, respostas: S.respostas, outros: S.outros, codesign: !!S.codesign,
       ident: { nome: I.nome, conselho: I.conselho, organizacao: I.organizacao, cnpj: I.cnpj, responsavelCargo: I.nome + (I.cargo ? ', ' + I.cargo : ''), cidadeUf: cidadeUf, contato: contato, localData: cidadeUf + ', ' + (S.extenso || '') },
       conselho: { ativo: S.perfil === 'comunidade' && !!S.codesign && !!S.conselho.quer, euSou: S.conselho.euSou, autorizo: S.conselho.autorizo, encontros: S.conselho.encontros, conforto: S.conselho.conforto },
-      registro: S.protocolo ? { protocolo: S.protocolo, quando: S.quando, email: S.email } : null
+      registro: S.protocolo ? { protocolo: S.protocolo, quando: S.quando, email: S.email, nome: I.nome } : null
     };
   }
   function respostasTabela() {
@@ -1287,7 +1302,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
   TELAS.revisao = function () {
     var P = PERFIS[S.perfil], I = S.ident, saude = S.perfil === 'comunidade';
     var ident = P.org ? esc(I.organizacao) + '<br><span class="muted">' + esc(I.nome) + (I.cargo ? ', ' + esc(I.cargo) : '') + '</span>' : esc(I.nome);
-    app.innerHTML = '<section class="screen"><span class="step">Última etapa</span><h2>Tudo certo para gerar sua carta</h2>' +
+    app.innerHTML = '<section class="screen"><span class="step">Última etapa</span><h2>Tudo certo para assinar sua carta</h2>' +
       '<div class="panel"><div class="summary">' +
       '<div><span class="k">Carta</span><span>' + esc(P.titulo.charAt(0) + P.titulo.slice(1).toLowerCase()) + (S.conselho.quer && S.codesign && saude ? ' + Termo do Conselho Consultivo' : '') + '</span></div>' +
       '<div><span class="k">' + (P.org ? 'Quem assina' : 'Nome') + '</span><span>' + ident + '</span></div>' +
@@ -1295,15 +1310,16 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       '<div><span class="k">E-mail</span><span>' + esc(S.email) + '</span></div>' +
       '</div><button class="btn btn-ghost" type="button" id="bEditar">Revisar respostas</button></div>' +
       '<details class="letter"><summary>Ler o texto da carta</summary><p>' + negrito(P.intro) + '</p><p>' + esc(CARTAS.AVISO) + '</p></details>' +
-      '<label class="check"><input type="checkbox" id="ac1"' + (S.aceiteCarta ? ' checked' : '') + '><span>Confirmo que as informações são verdadeiras e concordo com o texto da carta.</span></label>' +
+      '<label class="check"><input type="checkbox" id="ac1"' + (S.aceiteCarta ? ' checked' : '') + '><span><b>Li a carta e a assino eletronicamente.</b> Confirmo que as informações são verdadeiras.</span></label>' +
       (saude ? '<label class="check"><input type="checkbox" id="ac2"' + (S.aceiteSaude ? ' checked' : '') + '><span>Autorizo o uso das informações sobre diagnóstico e atendimento, que são dados de saúde, somente nesta carta e na avaliação da proposta. Nenhuma criança é identificada.</span></label>' : '') +
+      '<p class="small muted">Sua assinatura fica registrada na carta com seu nome, e-mail, data e hora.</p>' +
       '<p class="err" id="eR" role="alert"></p></section>';
-    barra(botaoVoltar() + '<button class="btn btn-primary" type="button" id="bGerar">Gerar minha carta</button>');
+    barra(botaoVoltar() + '<button class="btn btn-primary" type="button" id="bGerar">Assinar e gerar minha carta</button>');
     ligarVoltar();
     $('#bEditar').addEventListener('click', function () { ir('q:' + P.perguntas[0].id); });
     $('#bGerar').addEventListener('click', function () {
       S.aceiteCarta = $('#ac1').checked; S.aceiteSaude = saude ? $('#ac2').checked : false;
-      if (!S.aceiteCarta) { $('#eR').textContent = 'Marque a confirmação para gerar a carta.'; return; }
+      if (!S.aceiteCarta) { $('#eR').textContent = 'Marque a assinatura eletrônica para gerar a carta.'; return; }
       if (saude && !S.aceiteSaude) { $('#eR').textContent = 'Para a carta da comunidade, marque também a autorização sobre dados de saúde.'; return; }
       gerar();
     });
@@ -1312,14 +1328,15 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
   /* ---------------- geração e envio ---------------- */
   function montarPDF() {
     var d = dadosCarta();
-    var doc = CARTAS.gerarPDF(window.jspdf.jsPDF, d, window.TEA_LOGO_PDF);
-    pdfMem = { doc: doc, nome: CARTAS.nomeArquivo(d), blob: doc.output('blob') };
+    var doc = CARTAS.gerarPDF(window.jspdf.jsPDF, d, window.TEA_LOGO_PDF, 'eletronica');
+    var gov = CARTAS.gerarPDF(window.jspdf.jsPDF, d, window.TEA_LOGO_PDF, 'govbr');
+    pdfMem = { doc: doc, nome: CARTAS.nomeArquivo(d, 'eletronica'), blob: doc.output('blob'), govNome: CARTAS.nomeArquivo(d, 'govbr'), govB64: gov.output('datauristring').split(',')[1] };
     return pdfMem;
   }
   function obterPDF() { if (pdfMem) return Promise.resolve(pdfMem); return carregarJsPDF().then(montarPDF); }
 
   function gerar() {
-    var b = $('#bGerar'); b.disabled = true; b.innerHTML = '<span class="spin" aria-hidden="true"></span>Gerando sua carta';
+    var b = $('#bGerar'); b.disabled = true; b.innerHTML = '<span class="spin" aria-hidden="true"></span>Assinando sua carta';
     carregarJsPDF().then(function () {
       if (!S.protocolo) {
         var t = agoraBR();
@@ -1349,7 +1366,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
         codesign: !!S.codesign, conselho: (S.perfil === 'comunidade' && S.codesign && S.conselho.quer) ? 'Sim' : 'Não',
         remunerado: S.remunerado.join('; '), aceites: { lgpd: S.lgpd, carta: S.aceiteCarta, saude: S.aceiteSaude },
         respostas: respostasTabela(), titulo: PERFIS[S.perfil].titulo,
-        pdfNome: p.nome, pdfBase64: b64
+        pdfNome: p.nome, pdfBase64: b64, pdfGovNome: p.govNome, pdfGovBase64: p.govB64
       };
       api(payload, true).then(function (r) {
         if (r && r.ok) { S.registro = 'ok'; S.token = r.token || S.token; S.emailStatus = r.email || 'enviado'; }
@@ -1364,14 +1381,14 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
     var el = $('#stReg'); if (!el) return;
     if (S.registro === 'ok') {
       el.className = 'status ok';
-      el.innerHTML = ICON.ok.replace('<svg', '<svg width="20" height="20"') + '<span>' + (S.emailStatus === 'fila' ? 'Carta registrada. A cópia por e-mail sai nas próximas horas para <b>' + esc(S.email) + '</b>.' : 'Carta registrada e cópia enviada para <b>' + esc(S.email) + '</b>, com suas respostas. Abra a mensagem e toque em <b>Confirmar meu e-mail</b> para validar a carta. Se não encontrar, veja a caixa de spam.') + '</span>';
+      el.innerHTML = ICON.ok.replace('<svg', '<svg width="20" height="20"') + '<span>' + (S.emailStatus === 'fila' ? 'Carta assinada e registrada. A cópia por e-mail sai nas próximas horas para <b>' + esc(S.email) + '</b>.' : 'Carta assinada e registrada. Enviamos uma cópia para <b>' + esc(S.email) + '</b>, com suas respostas.') + '</span>';
     } else if (S.registro === 'erro') {
       el.className = 'status bad';
-      el.innerHTML = '<span>Sua carta foi gerada, mas ainda não conseguimos registrá-la. <button class="btn btn-soft" type="button" id="bRetry" style="min-height:40px;margin-top:6px">Tentar registrar de novo</button></span>';
+      el.innerHTML = '<span>Sua carta foi assinada, mas ainda não conseguimos registrá-la. <button class="btn btn-soft" type="button" id="bRetry" style="min-height:40px;margin-top:6px">Tentar registrar de novo</button></span>';
       $('#bRetry').addEventListener('click', function () { S.registro = 'enviando'; atualizarStatus(); obterPDF().then(registrar); });
     } else {
       el.className = 'status wait';
-      el.innerHTML = '<span class="spin" aria-hidden="true"></span><span>Registrando sua carta e enviando a cópia por e-mail.</span>';
+      el.innerHTML = '<span class="spin" aria-hidden="true"></span><span>Registrando sua assinatura e enviando a cópia por e-mail.</span>';
     }
   }
 
@@ -1398,15 +1415,14 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
     var msgWA = 'Assinei a carta de apoio ao TEAcolhe, plataforma feita com a comunidade autista que está no Programa Centelha 3 Paraná. Leva 3 minutos: ' + linkPagina();
     app.innerHTML = '<section class="screen">' +
       '<div class="done"><span class="seal">' + ICON.check.replace('stroke-width="3.2"', 'stroke-width="2.6"') + '</span>' +
-      '<h2>' + (nome ? esc(nome) + ', sua' : 'Sua') + ' carta está pronta</h2>' +
+      '<h2>' + (nome ? esc(nome) + ', sua' : 'Sua') + ' carta está assinada</h2>' +
       '<p class="muted">Protocolo <span class="proto">' + esc(S.protocolo) + '</span></p>' +
       '<p class="status wait" id="stReg" role="status"></p></div>' +
       (DEMO ? '<p class="banner">Modo de demonstração: nada foi enviado. Na página publicada, a carta é registrada e a cópia segue por e-mail.</p>' : '') +
       (inApp ? '<p class="banner">Se o download não abrir, toque no menu do aplicativo e escolha abrir no navegador, ou use a cópia enviada por e-mail.</p>' : '') +
       '<ol class="steps">' +
-      '<li><h3><span class="n">1</span>Baixe sua carta</h3><p class="small muted">PDF já preenchido com suas respostas.</p><div class="btns"><button class="btn btn-primary" type="button" id="bBaixar">' + ICON.down + 'Baixar PDF</button>' + (podeShare ? '<button class="btn btn-soft" type="button" id="bShare">' + ICON.share + 'Salvar ou enviar</button>' : '') + '</div><p class="err" id="avisoFinal" hidden></p></li>' +
-      '<li><h3><span class="n">2</span>Assine pelo gov.br</h3><p class="small muted">No assinador do gov.br, envie o PDF, posicione a assinatura no campo indicado e baixe o arquivo assinado. É preciso ter conta gov.br nível prata ou ouro. Se preferir, imprima, assine à mão e fotografe em PDF.</p><div class="btns"><a class="btn btn-soft" href="https://assinador.iti.br" target="_blank" rel="noopener">Abrir assinador gov.br</a></div></li>' +
-      '<li><h3><span class="n">3</span>Entregue a carta assinada</h3>' + (S.entregue ? '<p class="ok-line">Carta assinada recebida. Obrigado!</p>' : '<p class="small muted">É o que registra a sua participação. Envie aqui ou responda o e-mail que mandamos, com o PDF assinado em anexo.</p><div class="btns"><button class="btn btn-primary" type="button" id="bEntregar">' + ICON.up + 'Enviar carta assinada</button></div>') + '</li>' +
+      '<li><h3><span class="n">1</span>Baixe sua carta assinada</h3><p class="small muted">PDF com suas respostas e a sua assinatura eletrônica.</p><div class="btns"><button class="btn btn-primary" type="button" id="bBaixar">' + ICON.down + 'Baixar PDF</button>' + (podeShare ? '<button class="btn btn-soft" type="button" id="bShare">' + ICON.share + 'Salvar ou enviar</button>' : '') + '</div><p class="err" id="avisoFinal" hidden></p></li>' +
+      '<li><h3><span class="n">2</span>Confirme seu e-mail</h3><p class="small muted">Abra a mensagem que enviamos para <b>' + esc(S.email) + '</b> e toque em <b>Confirmar meu e-mail</b>. Isso valida o seu apoio. Se não encontrar, veja a caixa de spam.</p></li>' +
       '</ol>' +
       '<div class="panel"><h3>Chame mais gente</h3><p class="small muted">Cada carta conta na avaliação. Envie o link para famílias, profissionais e clínicas que você conhece.</p><div class="btns"><a class="btn btn-wa" href="https://wa.me/?text=' + encodeURIComponent(msgWA) + '" target="_blank" rel="noopener">' + ICON.wa + 'Compartilhar no WhatsApp</a></div></div>' +
       '<div class="panel"><h3>Mais de um perfil?</h3><p class="small muted">Se você também é profissional, representa uma clínica ou outro perfil, preencha outra carta.</p><button class="btn btn-ghost" type="button" id="bOutra">Preencher outra carta</button></div>' +
@@ -1415,7 +1431,6 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
     atualizarStatus();
     $('#bBaixar').addEventListener('click', baixar);
     var bs = $('#bShare'); if (bs) bs.addEventListener('click', compartilharPDF);
-    var be = $('#bEntregar'); if (be) be.addEventListener('click', function () { ir('entrega'); });
     $('#bOutra').addEventListener('click', function () {
       if (S.protocolo) S.enviadas.push(S.protocolo);
       var keep = { leadId: S.leadId, nome: S.nome, email: S.email, lgpd: S.lgpd, novidades: S.novidades, origem: S.origem, enviadas: S.enviadas };
@@ -1426,9 +1441,9 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
   };
 
   TELAS.entrega = function () {
-    app.innerHTML = '<section class="screen"><span class="step">Protocolo ' + esc(S.protocolo || '') + '</span><h2>Entregar carta assinada</h2>' +
-      '<p class="muted">Envie o PDF depois de assinar pelo gov.br. Se assinou à mão, envie a versão digitalizada em PDF.</p>' +
-      '<div class="field"><label for="arq">Arquivo PDF assinado</label><input id="arq" type="file" accept="application/pdf,.pdf"><span class="help">Tamanho máximo: 10 MB.</span></div>' +
+    app.innerHTML = '<section class="screen"><span class="step">Protocolo ' + esc(S.protocolo || '') + '</span><h2>Enviar apoio formal</h2>' +
+      '<p class="muted">Envie aqui a versão da carta assinada pelo gov.br.</p>' +
+      '<div class="field"><label for="arq">PDF assinado pelo gov.br</label><input id="arq" type="file" accept="application/pdf,.pdf"><span class="help">Tamanho máximo: 10 MB.</span></div>' +
       '<p class="status" id="stEnt" role="status"></p></section>';
     barra(botaoVoltar() + '<button class="btn btn-primary" type="button" id="bEnviar">Enviar</button>');
     $('#bVoltar').addEventListener('click', function () { ir(S.perfil ? 'final' : 'inicio'); });
@@ -1444,7 +1459,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
           if (r && r.ok) {
             S.entregue = true; salvar();
             st.className = 'status ok';
-            st.innerHTML = '<span>Carta assinada recebida. Obrigado por apoiar o TEAcolhe!' + (r.assinatura === false ? ' Não encontramos assinatura digital neste arquivo. Se você assinou à mão, está tudo certo. Se usou o gov.br, confira se enviou o arquivo baixado depois de assinar.' : '') + '</span>';
+            st.innerHTML = '<span>Apoio formal recebido. Obrigado por apoiar o TEAcolhe!' + (r.assinatura === false ? ' Não encontramos a assinatura do gov.br neste arquivo. Confira se enviou o arquivo baixado depois de assinar.' : '') + '</span>';
             barra('<button class="btn btn-primary" type="button" id="bFim">Concluir</button>');
             $('#bFim').addEventListener('click', function () { ir(S.perfil ? 'final' : 'inicio'); });
           } else {
