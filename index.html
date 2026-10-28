@@ -828,6 +828,9 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
   function $$(sel, el) { return Array.prototype.slice.call((el || document).querySelectorAll(sel)); }
   function primeiroNome(n) { return (n || '').trim().split(/\s+/)[0] || ''; }
   function aleatorio(n) { var a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '', r = new Uint32Array(n); (window.crypto || window.msCrypto).getRandomValues(r); for (var i = 0; i < n; i++) s += a[r[i] % a.length]; return s; }
+  function nomeProprio(t) {
+    return String(t || '').toLowerCase().split(' ').map(function (w, i) { return (i > 0 && /^(de|da|do|das|dos|e|d')$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+  }
   function emailOk(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((e || '').trim()); }
   function soDigitos(s) { return (s || '').replace(/\D/g, ''); }
   function cnpjOk(c) {
@@ -1286,7 +1289,7 @@ window.TEA_LOGO_PDF = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA
       if (S.perfil === 'profissional' && v('conselho').length < 3) return falta('conselho', 'Informe o conselho e o número de registro.');
       if (v('cidade').length < 2) return falta('cidade', 'Informe a cidade.');
       I.organizacao = v('organizacao'); I.cnpj = v('cnpj'); I.nome = v('nomeId'); I.cargo = v('cargo'); I.conselho = v('conselho');
-      I.cidade = v('cidade'); I.uf = $('#uf').value; I.fone = v('fone');
+      I.cidade = nomeProprio(v('cidade')); I.uf = $('#uf').value; I.fone = v('fone');
       salvar(); etapa('identificacao'); avancar();
     });
   };
